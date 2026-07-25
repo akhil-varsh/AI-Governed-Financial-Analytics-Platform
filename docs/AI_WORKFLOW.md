@@ -6,34 +6,55 @@ Engineer should be able to use AI tools well **and** explain what they own.
 
 ## How the work was structured
 
-The build runs in **explicit phases** (scaffold → contracts/ingestion → Silver →
-Gold → marts → tests/docs → orchestration/CI → docs), with a review checkpoint
-at the end of each phase. AI does not run ahead; each phase is inspected and
-accepted before the next begins. This keeps every change reviewable and keeps me
-(the engineer) in control of the design, not just the output.
+The build ran in **eight explicit phases** (scaffold → contracts/ingestion →
+Silver → Gold → marts → tests/docs → orchestration/CI → docs), with a review
+checkpoint at the end of each. AI did not run ahead; each phase was summarised,
+inspected, and accepted before the next began. Each phase also produced a
+`docs/why/` note stating the key decisions and the rejected alternatives, so the
+reasoning is recoverable and defensible.
 
-## What AI did well here
+## The principle: AI types, the engineer verifies
 
-- Scaffolding boilerplate (project layout, Makefile, dbt config) quickly and
-  consistently.
-- Writing the seeded synthetic-data generator, including the GL tie-out logic.
-- Drafting documentation and ADRs from a stated rationale.
+Every claim in this repo is backed by a command that was actually run — not
+asserted. Concretely, during the build we **executed and confirmed**:
+
+- the GL reconciles to sales revenue (to $0.12 on $173M) — in pandas *and* in the
+  warehouse;
+- the full dependency graph resolves on Python 3.11 and the lockfile builds;
+- `dbt build` is green at each layer (217 nodes; 195 tests);
+- ingestion is idempotent (re-run skips loaded batches) and `fact_sales` is
+  idempotent (re-run holds 200k/200k);
+- both SCD2 histories match the injected changes, and a point-in-time join
+  attributes sales to the segment as-was;
+- Dagster loads and the job runs end-to-end (`RUN_SUCCESS`);
+- the CI recipe is green — run locally before pushing.
+
+## Bugs the verification caught (and fixed)
+
+Running things, rather than trusting that they "look right", surfaced real bugs:
+
+1. A data contract wrongly required `discount_amount >= 0`, which failed on
+   returns (negative discount). → Loosened the contract, not the data.
+2. `CUST-000002`'s middle master extract was unpinned and leaked a random
+   segment, creating a spurious third SCD2 version. → Pinned all three special
+   customers explicitly.
+3. The revenue-bridge test asserted `gross − discounts + returns = net` and
+   failed on 34/36 months by cents (independent per-line rounding). → Tested the
+   identity that's exact by construction (`sales_net + returns = net`).
+4. A cross-layer singular test ran under dbt's default *eager* selection before
+   its model existed, breaking the split CI build. → `--indirect-selection
+   cautious` on the intermediate build.
+
+None of these were visible on paper; all were obvious on execution.
 
 ## What stays a human decision
 
-- **Architecture** — the medallion split, the star-schema grain, SCD strategy,
-  and the portability seam are design choices I own and can defend (see the
-  ADRs and the per-phase `why/` notes).
-- **Verification** — every generated artefact is run and checked. Phase 1
-  examples: the generator's tie-out reconciliation was executed and confirmed
-  (~$173M GL revenue == sales net revenue); the full dependency graph was
-  resolved on Python 3.11; `dbt parse` was run to confirm the project compiles.
-- **Correctness of business logic** — fiscal calendar, currency conversion, and
-  data-quality rules are checked against the business definitions, not taken on
-  faith.
+- **Architecture** — the medallion split, star-schema grain, the two SCD2
+  strategies, the portability seam, and the dual-engine (BigQuery/DuckDB) call are
+  design choices owned and defended in the ADRs and `why/` notes.
+- **Business correctness** — the February fiscal calendar, FX conversion, the
+  allow-legal / reject-corrupt line for contracts, and the materiality tolerance
+  on the tie-out are judgement calls checked against the business definitions.
+- **Verification** — deciding *what* to prove, and actually proving it.
 
-## Principle
-
-AI accelerates the *typing*; the engineer owns the *thinking* and the
-*verification*. Every claim in this repo ("it ties out", "it's idempotent", "the
-tests pass") is backed by a command that was actually run, not asserted.
+AI accelerated the typing; the engineer owns the thinking and the verification.
