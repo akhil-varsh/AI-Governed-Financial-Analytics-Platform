@@ -1,0 +1,156 @@
+# =============================================================================
+# Semantic layer — the governed metric catalogue.
+#
+# The LLM asks for a METRIC by name (+ dimensions/filters/time_grain); it never
+# writes the revenue formula. That formula lives here, owned and reviewed, so the
+# number is defined once and cannot be reinvented wrongly.
+#
+# {base} in a join is replaced with the fact-table alias at compile time.
+# =============================================================================
+
+# --- Dimensions: how a value can be sliced ----------------------------------
+dimensions:
+  region:
+    sql: "dim_region.region_name"
+    join: "left join gold.dim_region on {base}.region_sk = dim_region.region_sk"
+    description: "Sales/GL region (Northeast/Southeast/Midwest/West)."
+  channel:
+    sql: "dim_channel.channel_name"
+    join: "left join gold.dim_channel on {base}.channel_sk = dim_channel.channel_sk"
+    description: "Sales channel (Retail/Online/Wholesale)."
+  customer_segment:
+    sql: "dim_customer.customer_segment"
+    join: "left join gold.dim_customer on {base}.customer_sk = dim_customer.customer_sk"
+    description: "Customer segment as-was at the time of sale (SCD2)."
+  product_category:
+    sql: "dim_product.category"
+    join: "left join gold.dim_product on {base}.product_sk = dim_product.product_sk"
+    description: "Product merchandising category."
+  fiscal_year:
+    sql: "dim_date.fiscal_year"
+    join: "left join gold.dim_date on {base}.date_key = dim_date.date_key"
+    description: "Fiscal year (February start)."
+  fiscal_quarter:
+    sql: "dim_date.fiscal_quarter"
+    join: "left join gold.dim_date on {base}.date_key = dim_date.date_key"
+    description: "Fiscal quarter (1-4)."
+  fiscal_month:
+    sql: "dim_date.fiscal_month"
+    join: "left join gold.dim_date on {base}.date_key = dim_date.date_key"
+    description: "Fiscal month (February=1 .. January=12)."
+  cost_center:
+    sql: "{base}.cost_center"
+    description: "GL cost center / channel."
+  account_name:
+    sql: "{base}.account_name"
+    description: "GL account name."
+  customer:                      # not groupable — used only to join for customer counts
+    sql: "dim_customer.customer_id"
+    join: "left join gold.dim_customer on {base}.customer_sk = dim_customer.customer_sk"
+    description: "Customer natural key (for distinct-customer counts)."
+    groupable: false
+
+# --- Filters: how results can be narrowed (values are always parameterised) --
+filters:
+  region:
+    sql: "dim_region.region_name"
+    join: "left join gold.dim_region on {base}.region_sk = dim_region.region_sk"
+    type: string
+    description: "Restrict to one or more regions."
+  channel:
+    sql: "dim_channel.channel_name"
+    join: "left join gold.dim_channel on {base}.channel_sk = dim_channel.channel_sk"
+    type: string
+  customer_segment:
+    sql: "dim_customer.customer_segment"
+    join: "left join gold.dim_customer on {base}.customer_sk = dim_customer.customer_sk"
+    type: string
+  product_category:
+    sql: "dim_product.category"
+    join: "left join gold.dim_product on {base}.product_sk = dim_product.product_sk"
+    type: string
+  fiscal_year:
+    sql: "dim_date.fiscal_year"
+    join: "left join gold.dim_date on {base}.date_key = dim_date.date_key"
+    type: int
+  is_return:
+    sql: "{base}.is_return"
+    type: bool
+    description: "true = returns only, false = sales only."
+  currency:
+    sql: "{base}.currency"
+    type: string
+  account_code:
+    sql: "{base}.account_code"
+    type: string
+
+# --- Metrics -----------------------------------------------------------------
+metrics:
+  net_revenue:
+    label: "Net revenue"
+    definition: "Total net revenue in USD (gross revenue minus discounts; returns net out)."
+    base_table: "gold.fact_sales"
+    expression: "sum(net_revenue)"
+    unit: usd
+    allowed_dimensions: [region, channel, customer_segment, product_category, fiscal_year, fiscal_quarter, fiscal_month]
+    allowed_filters: [region, channel, customer_segment, product_category, fiscal_year, is_return, currency]
+    default_time_grain: fiscal_quarter
+    owner: "Finance Data Team"
+
+  gross_margin_pct:
+    label: "Gross margin %"
+    definition: "Gross profit as a percentage of net revenue: 100 * sum(gross_profit) / sum(net_revenue)."
+    base_table: "gold.fact_sales"
+    expression: "round(100.0 * sum(gross_profit) / nullif(sum(net_revenue), 0), 2)"
+    unit: pct
+    allowed_dimensions: [region, channel, customer_segment, product_category, fiscal_year, fiscal_quarter, fiscal_month]
+    allowed_filters: [region, channel, customer_segment, product_category, fiscal_year, currency]
+    default_time_grain: fiscal_quarter
+    owner: "Finance Data Team"
+
+  average_order_value:
+    label: "Average order value"
+    definition: "Net revenue divided by the number of distinct orders (USD per order)."
+    base_table: "gold.fact_sales"
+    expression: "round(sum(net_revenue) / nullif(count(distinct order_id), 0), 2)"
+    unit: usd
+    allowed_dimensions: [region, channel, customer_segment, product_category, fiscal_year, fiscal_quarter, fiscal_month]
+    allowed_filters: [region, channel, customer_segment, product_category, fiscal_year, is_return, currency]
+    default_time_grain: fiscal_quarter
+    owner: "Finance Data Team"
+
+  customer_count:
+    label: "Customer count"
+    definition: "Number of distinct customers (by natural key, so SCD2 versions are not double-counted)."
+    base_table: "gold.fact_sales"
+    expression: "count(distinct dim_customer.customer_id)"
+    unit: count
+    required_joins: [customer]
+    allowed_dimensions: [region, channel, customer_segment, product_category, fiscal_year, fiscal_quarter, fiscal_month]
+    allowed_filters: [region, channel, customer_segment, product_category, fiscal_year]
+    default_time_grain: fiscal_year
+    owner: "Finance Data Team"
+
+  revenue_per_customer:
+    label: "Revenue per customer"
+    definition: "Net revenue divided by the number of distinct customers (USD per customer)."
+    base_table: "gold.fact_sales"
+    expression: "round(sum(net_revenue) / nullif(count(distinct dim_customer.customer_id), 0), 2)"
+    unit: usd
+    required_joins: [customer]
+    allowed_dimensions: [region, channel, customer_segment, product_category, fiscal_year, fiscal_quarter, fiscal_month]
+    allowed_filters: [region, channel, customer_segment, product_category, fiscal_year]
+    default_time_grain: fiscal_year
+    owner: "Finance Data Team"
+
+  gl_expense_total:
+    label: "GL operating expense total"
+    definition: "Total operating expense from the general ledger (accounts 6000/6100/6200), in USD."
+    base_table: "gold.fact_gl"
+    expression: "sum(amount_usd)"
+    unit: usd
+    base_filter: "account_code in ('6000', '6100', '6200')"
+    allowed_dimensions: [region, cost_center, account_name, fiscal_year, fiscal_quarter, fiscal_month]
+    allowed_filters: [region, fiscal_year, account_code]
+    default_time_grain: fiscal_quarter
+    owner: "Finance Data Team"

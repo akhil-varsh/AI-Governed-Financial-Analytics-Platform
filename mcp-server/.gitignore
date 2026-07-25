@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Exported warehouse (reproducible via `make export`)
+data/*.duckdb
+data/*.duckdb.wal
+
+# Audit logs (added in Phase 6)
+logs/
+*.log
+
+# Secrets / local env
+.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
