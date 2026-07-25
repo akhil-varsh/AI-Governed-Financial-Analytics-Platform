@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🏛️ Northwind — AI-Governed Financial Analytics Platform
+# 🏛️ AI-Governed Financial Analytics Platform
 
 **Let a CFO ask a finance data warehouse questions in plain English — without ever getting a made-up number, a dropped table, or an unlogged query back.**
 
@@ -12,7 +12,7 @@ A tested dbt + DuckDB star schema, wrapped in a read-only [MCP](https://modelcon
 &nbsp;![DuckDB](https://img.shields.io/badge/warehouse-DuckDB-FFF000?logo=duckdb&logoColor=black)
 &nbsp;![MCP](https://img.shields.io/badge/protocol-MCP-8A2BE2)
 
-<img src="mcp-server/mcp-runs/run.gif" alt="Claude Desktop querying the governed MCP server: net revenue by region via the query_metric tool, then reconciling the total to the general ledger to within twelve cents" width="840">
+<img src="mcp-server/mcp-runs/run.gif" alt="Claude Desktop querying the governed MCP server: net revenue by region via the query_metric tool, then reconciling the total to the general ledger to within twelve cents" width="520">
 
 <sub><b>Live in Claude Desktop</b> — the model calls the governed <code>query_metric</code> tool for net revenue by region, then reconciles the $173M total to the general ledger and lands within <b>$0.12</b>. It never wrote the revenue formula and never touched a raw connection; the server did.</sub>
 
