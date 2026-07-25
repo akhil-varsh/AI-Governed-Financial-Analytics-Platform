@@ -1,5 +1,7 @@
 # Northwind Retail Co — PE Value-Creation Lakehouse
 
+[![CI](https://github.com/akhil-varsh/AI-Governed-Financial-Analytics-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/akhil-varsh/AI-Governed-Financial-Analytics-Platform/actions/workflows/ci.yml)
+
 A medallion-architecture data platform that gives a private-equity sponsor's
 operating partner and Northwind Retail Co's CFO a **single trusted view of
 revenue, gross margin, and operating KPIs** — by region, channel, product
