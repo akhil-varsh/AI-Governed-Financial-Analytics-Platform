@@ -12,9 +12,11 @@ select
     g.gl_id,                                 -- degenerate dimension
 
     -- foreign keys
-    (extract(year from g.posting_date) * 10000
+    (
+        extract(year from g.posting_date) * 10000
         + extract(month from g.posting_date) * 100
-        + extract(day from g.posting_date))   as date_key,
+        + extract(day from g.posting_date)
+    ) as date_key,
     g.posting_date,
     g.posting_month,
     dr.region_sk,
@@ -26,6 +28,6 @@ select
 
     -- measure
     g.amount_usd
-from gl g
-left join {{ ref('dim_region') }} dr
+from gl as g
+left join {{ ref('dim_region') }} as dr
     on g.region = dr.region_name

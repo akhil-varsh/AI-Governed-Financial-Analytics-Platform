@@ -27,12 +27,19 @@
 with orders as (
     select * from {{ ref('silver_orders') }}
     {% if is_incremental() %}
-    where _loaded_at > (select coalesce(max(_loaded_at), cast('1900-01-01' as timestamp)) from {{ this }})
+    where
+        _loaded_at > (
+            select coalesce(max(existing._loaded_at), cast('1900-01-01' as timestamp))
+            from {{ this }} as existing
+        )
     {% endif %}
 ),
 
 product_current as (
-    select product_id, product_sk, standard_cost
+    select
+        product_id,
+        product_sk,
+        standard_cost
     from {{ ref('dim_product') }}
     where is_current
 )
@@ -42,9 +49,11 @@ select
     o.order_id,                              -- degenerate dimension
 
     -- foreign keys
-    (extract(year from o.order_date) * 10000
+    (
+        extract(year from o.order_date) * 10000
         + extract(month from o.order_date) * 100
-        + extract(day from o.order_date))                       as date_key,
+        + extract(day from o.order_date)
+    ) as date_key,
     o.order_date,
     dc.customer_sk,
     pc.product_sk,
@@ -59,21 +68,22 @@ select
 
     -- measures (USD reporting currency)
     o.quantity,
-    o.gross_revenue_usd                                          as gross_revenue,
-    o.discount_amount_usd                                        as discount_amount,
-    o.net_revenue_usd                                            as net_revenue,
-    round(o.quantity * pc.standard_cost, 2)                      as cogs,
+    o.gross_revenue_usd as gross_revenue,
+    o.discount_amount_usd as discount_amount,
+    o.net_revenue_usd as net_revenue,
+    round(o.quantity * pc.standard_cost, 2) as cogs,
     round(o.net_revenue_usd - (o.quantity * pc.standard_cost), 2) as gross_profit,
 
     o._loaded_at
-from orders o
-left join {{ ref('dim_customer') }} dc
-    on o.customer_id = dc.customer_id
-   and o.order_date >= dc.valid_from
-   and o.order_date <  dc.valid_to
-left join product_current pc
+from orders as o
+left join {{ ref('dim_customer') }} as dc
+    on
+        o.customer_id = dc.customer_id
+        and o.order_date >= dc.valid_from
+        and o.order_date < dc.valid_to
+left join product_current as pc
     on o.product_id = pc.product_id
-left join {{ ref('dim_region') }} dr
+left join {{ ref('dim_region') }} as dr
     on o.region = dr.region_name
-left join {{ ref('dim_channel') }} dch
+left join {{ ref('dim_channel') }} as dch
     on o.channel = dch.channel_name

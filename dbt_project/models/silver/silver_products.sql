@@ -10,7 +10,7 @@ ranked as (
     select
         product_id,
         extract_date,
-        trim(description)  as description,
+        trim(description) as description,
         category,
         subcategory,
         list_price,

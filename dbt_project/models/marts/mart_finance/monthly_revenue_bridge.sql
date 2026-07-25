@@ -18,8 +18,8 @@ with sales as (
         d.fiscal_year,
         d.fiscal_month,
         d.fiscal_year_label
-    from {{ ref('fact_sales') }} fs
-    join {{ ref('dim_date') }} d on fs.date_key = d.date_key
+    from {{ ref('fact_sales') }} as fs
+    inner join {{ ref('dim_date') }} as d on fs.date_key = d.date_key
 ),
 
 monthly as (
@@ -35,16 +35,16 @@ monthly as (
         -- discount and net are independently rounded to cents, gross_sales −
         -- discounts only approximates sales_net (off by rounding cents), so the
         -- exact identity we assert is the return/non-return split, not gross−disc.
-        sum(case when not is_return then gross_revenue else 0 end)   as gross_sales,
+        sum(case when not is_return then gross_revenue else 0 end) as gross_sales,
         sum(case when not is_return then discount_amount else 0 end) as discounts,
-        sum(case when not is_return then net_revenue else 0 end)     as sales_net,
-        sum(case when is_return then net_revenue else 0 end)         as returns,
-        sum(net_revenue)                                             as net_revenue,
+        sum(case when not is_return then net_revenue else 0 end) as sales_net,
+        sum(case when is_return then net_revenue else 0 end) as returns,
+        sum(net_revenue) as net_revenue,
 
         -- profitability
-        sum(cogs)                                                    as cogs,
-        sum(gross_profit)                                            as gross_profit,
-        count(*)                                                     as order_lines
+        sum(cogs) as cogs,
+        sum(gross_profit) as gross_profit,
+        count(*) as order_lines
     from sales
     group by month_start, fiscal_year, fiscal_month
 )
@@ -64,17 +64,17 @@ select
     net_revenue,
 
     -- (b) period-over-period bridge
-    lag(net_revenue) over (order by month_start)                      as prior_net_revenue,
-    net_revenue - lag(net_revenue) over (order by month_start)        as mom_change,
+    lag(net_revenue) over (order by month_start) as prior_net_revenue,
+    net_revenue - lag(net_revenue) over (order by month_start) as mom_change,
     round(
         100.0 * (net_revenue - lag(net_revenue) over (order by month_start))
         / nullif(lag(net_revenue) over (order by month_start), 0), 2
-    )                                                                 as mom_change_pct,
+    ) as mom_change_pct,
 
     -- profitability
     cogs,
     gross_profit,
-    round(100.0 * gross_profit / nullif(net_revenue, 0), 2)           as gross_margin_pct,
+    round(100.0 * gross_profit / nullif(net_revenue, 0), 2) as gross_margin_pct,
     order_lines
 from monthly
 order by month_start

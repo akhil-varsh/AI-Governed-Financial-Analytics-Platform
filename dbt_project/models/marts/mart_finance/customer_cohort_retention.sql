@@ -10,15 +10,18 @@ with purchases as (
     select
         dc.customer_id,
         {{ date_trunc_month('fs.order_date') }} as order_month
-    from {{ ref('fact_sales') }} fs
-    join {{ ref('dim_customer') }} dc on fs.customer_sk = dc.customer_sk
-    where not fs.is_unknown_customer
-      and not fs.is_return
+    from {{ ref('fact_sales') }} as fs
+    inner join {{ ref('dim_customer') }} as dc on fs.customer_sk = dc.customer_sk
+    where
+        not fs.is_unknown_customer
+        and not fs.is_return
 ),
 
 -- each customer's acquisition month
 first_purchase as (
-    select customer_id, min(order_month) as cohort_month
+    select
+        customer_id,
+        min(order_month) as cohort_month
     from purchases
     group by customer_id
 ),
@@ -29,8 +32,8 @@ activity as (
         p.customer_id,
         fp.cohort_month,
         p.order_month
-    from purchases p
-    join first_purchase fp on p.customer_id = fp.customer_id
+    from purchases as p
+    inner join first_purchase as fp on p.customer_id = fp.customer_id
 ),
 
 -- months elapsed since acquisition
@@ -39,12 +42,14 @@ periods as (
         cohort_month,
         customer_id,
         (extract(year from order_month) - extract(year from cohort_month)) * 12
-            + (extract(month from order_month) - extract(month from cohort_month)) as period_number
+        + (extract(month from order_month) - extract(month from cohort_month)) as period_number
     from activity
 ),
 
 cohort_size as (
-    select cohort_month, count(distinct customer_id) as cohort_size
+    select
+        cohort_month,
+        count(distinct customer_id) as cohort_size
     from first_purchase
     group by cohort_month
 ),
@@ -64,6 +69,6 @@ select
     a.period_number,
     a.active_customers,
     round(100.0 * a.active_customers / nullif(cs.cohort_size, 0), 2) as retention_pct
-from active a
-join cohort_size cs on a.cohort_month = cs.cohort_month
+from active as a
+inner join cohort_size as cs on a.cohort_month = cs.cohort_month
 order by a.cohort_month, a.period_number

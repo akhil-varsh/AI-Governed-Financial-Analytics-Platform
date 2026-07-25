@@ -1,0 +1,37 @@
+# sqlfluff config. We lint the COMPILED SQL via the dbt templater against the
+# duckdb dialect (the engine CI runs), so macro output is linted as real SQL.
+[sqlfluff]
+templater = dbt
+dialect = duckdb
+max_line_length = 120
+
+# Rules we deliberately relax for this project's house style:
+#   LT05  line length is governed by max_line_length above (comments can run long)
+#   ST06  select-target ordering (we group columns logically, not by type)
+#   RF04  keywords used as identifiers (e.g. a column named "returns")
+#   AM04  query produces an unknown number of columns (select * in CTE passthroughs)
+#   RF01  false positives on dbt refs/duckdb schema resolution
+#   CP03  function-name casing (macros emit vendor functions in upper case)
+#   ST07  using vs on (we prefer explicit ON joins, occasionally USING)
+exclude_rules = LT05, ST06, RF04, AM04, RF01, CP03, ST07
+
+[sqlfluff:indentation]
+tab_space_size = 4
+indented_joins = false
+indented_using_on = true
+template_blocks_indent = false
+
+# Keywords lower-case to match the models' house style.
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.identifiers]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+capitalisation_policy = lower
+
+[sqlfluff:templater:dbt]
+project_dir = dbt_project
+profiles_dir = dbt_project
+target = duckdb

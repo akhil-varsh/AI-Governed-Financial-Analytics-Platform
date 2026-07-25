@@ -12,14 +12,16 @@ with snap as (
 
 -- SCD1 source: the most recent description per product.
 latest_description as (
-    select product_id, description
+    select
+        product_id,
+        description
     from (
         select
             product_id,
             description,
             row_number() over (partition by product_id order by extract_date desc) as _rn
         from {{ ref('silver_products') }}
-    ) ranked
+    ) as ranked
     where _rn = 1
 )
 
@@ -31,9 +33,9 @@ select
     snap.subcategory,
     snap.list_price,                      -- SCD2
     snap.standard_cost,
-    snap.dbt_valid_from                                        as valid_from,
+    snap.dbt_valid_from as valid_from,
     coalesce(snap.dbt_valid_to, cast('9999-12-31' as timestamp)) as valid_to,
-    (snap.dbt_valid_to is null)                               as is_current
+    (snap.dbt_valid_to is null) as is_current
 from snap
-left join latest_description ld
+left join latest_description as ld
     on snap.product_id = ld.product_id

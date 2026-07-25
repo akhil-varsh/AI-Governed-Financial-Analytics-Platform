@@ -4,10 +4,10 @@ with source as (
 )
 
 select
-    {{ try_cast('rate_date', 'date') }}       as rate_date,
+    {{ try_cast('rate_date', 'date') }} as rate_date,
     from_currency,
     to_currency,
-    {{ try_cast('rate', 'numeric') }}         as rate,
+    {{ try_cast('rate', 'numeric') }} as rate,
 
     {{ try_cast('_loaded_at', 'timestamp') }} as _loaded_at,
     _source_file,

@@ -5,12 +5,12 @@ with source as (
 
 select
     gl_id,
-    {{ try_cast('posting_date', 'date') }}    as posting_date,
+    {{ try_cast('posting_date', 'date') }} as posting_date,
     account_code,
     account_name,
     region,
     cost_center,
-    {{ try_cast('amount_usd', 'numeric') }}   as amount_usd,
+    {{ try_cast('amount_usd', 'numeric') }} as amount_usd,
     currency,
     source_system,
 

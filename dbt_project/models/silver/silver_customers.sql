@@ -12,7 +12,7 @@ ranked as (
     select
         customer_id,
         extract_date,
-        trim(customer_name)    as customer_name,
+        trim(customer_name) as customer_name,
         customer_segment,
         region,
         signup_date,

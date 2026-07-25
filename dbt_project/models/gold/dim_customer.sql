@@ -29,8 +29,8 @@ with src as (
 flagged as (
     select
         src.*,
-        lag(customer_segment) over w as prev_segment,
-        lag(region) over w          as prev_region
+        lag(src.customer_segment) over w as prev_segment,
+        lag(src.region) over w as prev_region
     from src
     window w as (partition by customer_id order by extract_date)
 ),
@@ -42,9 +42,10 @@ version_starts as (
         *,
         (prev_segment is null) as is_first
     from flagged
-    where prev_segment is null
-       or customer_segment <> prev_segment
-       or region <> prev_region
+    where
+        prev_segment is null
+        or customer_segment <> prev_segment
+        or region <> prev_region
 ),
 
 -- Derive validity windows: valid_to is the next version's start (half-open),
@@ -67,14 +68,24 @@ dated as (
 
 with_unknown as (
     select
-        customer_id, customer_name, customer_segment, region, signup_date,
-        valid_from, valid_to
+        customer_id,
+        customer_name,
+        customer_segment,
+        region,
+        signup_date,
+        valid_from,
+        valid_to
     from dated
     union all
     -- the sentinel member for unresolved customer ids
     select
-        'UNKNOWN', 'Unknown Customer', 'Unknown', 'Unknown', cast(null as date),
-        cast('1900-01-01' as date), {{ scd_end_of_time() }}
+        'UNKNOWN' as customer_id,
+        'Unknown Customer' as customer_name,
+        'Unknown' as customer_segment,
+        'Unknown' as region,
+        cast(null as date) as signup_date,
+        cast('1900-01-01' as date) as valid_from,
+        {{ scd_end_of_time() }} as valid_to
 )
 
 select
