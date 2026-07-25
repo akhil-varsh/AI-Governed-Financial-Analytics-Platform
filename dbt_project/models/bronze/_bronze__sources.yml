@@ -8,9 +8,10 @@ sources:
       column as STRING plus typed ingestion metadata — after passing their data
       contract. Append-only. No transformation happens here; typing starts in the
       bronze view models.
-    database: "{{ env_var('DBT_BIGQUERY_PROJECT') }}"
-    # Landing dataset is <target dataset>_raw, matching load_to_bronze.py.
-    schema: "{{ target.dataset ~ '_raw' }}"
+    # `database` is omitted so it defaults to the active target's database
+    # (BigQuery project, or the DuckDB catalog) — keeps this portable across both
+    # engines. Landing schema is <target schema>_raw, matching load_to_bronze.py.
+    schema: "{{ target.schema ~ '_raw' }}"
 
     # Freshness is checked against the ingestion timestamp. Thresholds are
     # deliberately generous here; tier-1 source tests are expanded in Phase 6.

@@ -11,8 +11,19 @@
 # (see the commented block) to use `gcloud auth application-default login`.
 
 northwind:
-  target: dev
+  # Default target is the local DuckDB engine: it runs the FULL brief (dbt
+  # snapshots + incremental merge) with no cloud cost and no DML restriction,
+  # which the BigQuery sandbox (no billing) blocks. BigQuery remains the
+  # documented production warehouse — switch with `--target dev`. The SQL is
+  # identical; only vendor syntax differs, isolated in macros/warehouse_portability.sql.
+  target: duckdb
   outputs:
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'northwind.duckdb') }}"
+      schema: "{{ env_var('DBT_DUCKDB_SCHEMA', 'northwind_dev') }}"
+      threads: 4
+
     dev:
       type: bigquery
       method: service-account

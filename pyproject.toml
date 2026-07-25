@@ -23,6 +23,7 @@ dependencies = [
 platform = [
     "dbt-core>=1.9,<1.10",
     "dbt-bigquery>=1.9,<1.10",
+    "dbt-duckdb>=1.9,<1.10",     # local execution target (no DML restriction, no cloud cost)
     "dagster>=1.9,<1.11",
     "dagster-dbt>=0.25,<0.27",
     "dagster-webserver>=1.9,<1.11",

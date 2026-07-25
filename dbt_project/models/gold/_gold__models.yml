@@ -1,0 +1,275 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: "Generated calendar dimension with Northwind's February fiscal year. Grain: one row per calendar day."
+    columns:
+      - name: date_key
+        description: Integer surrogate key in YYYYMMDD form.
+        data_tests: [unique, not_null]
+      - name: date_day
+        description: Calendar date.
+        data_tests: [unique, not_null]
+      - name: calendar_year
+        description: Calendar year.
+        data_tests: [not_null]
+      - name: calendar_quarter
+        description: Calendar quarter (1–4).
+        data_tests: [not_null]
+      - name: calendar_month
+        description: Calendar month (1–12).
+        data_tests: [not_null]
+      - name: month_name
+        description: Full month name.
+      - name: day_of_month
+        description: Day of the month (1–31).
+      - name: day_name
+        description: Full weekday name.
+      - name: is_weekend
+        description: True on Saturday/Sunday.
+      - name: fiscal_year
+        description: Fiscal year (starts in February; e.g. Feb 2023–Jan 2024 = fiscal_year 2023).
+        data_tests: [not_null]
+      - name: fiscal_year_label
+        description: Fiscal year as a label, e.g. 'FY2023'.
+        data_tests: [not_null]
+      - name: fiscal_month
+        description: Month within the fiscal year (February = 1 … January = 12).
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+              quote: false
+      - name: fiscal_quarter
+        description: Fiscal quarter (1–4), derived from fiscal_month.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4]
+              quote: false
+
+  - name: dim_region
+    description: "Conformed region dimension, including an 'Unknown' member. Grain: one row per region."
+    columns:
+      - name: region_sk
+        description: Surrogate key.
+        data_tests: [unique, not_null]
+      - name: region_name
+        description: Canonical region name.
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values:
+              values: ["Northeast", "Southeast", "Midwest", "West", "Unknown"]
+
+  - name: dim_channel
+    description: "Conformed sales-channel dimension. Grain: one row per channel."
+    columns:
+      - name: channel_sk
+        description: Surrogate key.
+        data_tests: [unique, not_null]
+      - name: channel_name
+        description: Channel name.
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values:
+              values: ["Retail", "Online", "Wholesale"]
+
+  - name: dim_customer
+    description: >
+      Customer dimension, SCD Type 2 (hand-written) tracking customer_segment and
+      region with business-effective validity windows. Includes an 'UNKNOWN'
+      member. Grain: one row per customer per version.
+    columns:
+      - name: customer_sk
+        description: Surrogate key (hash of customer_id + valid_from); unique per version.
+        data_tests: [unique, not_null]
+      - name: customer_id
+        description: Customer natural key (repeats across versions).
+        data_tests: [not_null]
+      - name: customer_name
+        description: Customer display name.
+        data_tests: [not_null]
+      - name: customer_segment
+        description: Commercial segment in force during this version.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["Consumer", "SMB", "Mid-Market", "Enterprise", "Unknown"]
+      - name: region
+        description: Home region in force during this version.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["Northeast", "Southeast", "Midwest", "West", "Unknown"]
+      - name: signup_date
+        description: Onboarding date (null for the UNKNOWN member).
+      - name: valid_from
+        description: Inclusive start of the version's validity window (business-effective).
+        data_tests: [not_null]
+      - name: valid_to
+        description: Exclusive end of the version's validity window (9999-12-31 for the current row).
+        data_tests: [not_null]
+      - name: is_current
+        description: True for the currently-active version.
+        data_tests: [not_null]
+
+  - name: dim_product
+    description: >
+      Product dimension. SCD Type 1 on description (latest overlaid), SCD Type 2
+      on category and list_price (from the dbt snapshot). Grain: one row per
+      product per SCD2 version.
+    columns:
+      - name: product_sk
+        description: Surrogate key (hash of product_id + snapshot valid_from); unique per version.
+        data_tests: [unique, not_null]
+      - name: product_id
+        description: Product natural key (repeats across versions).
+        data_tests: [not_null]
+      - name: description
+        description: Latest product description (SCD1 — overwritten, no history).
+        data_tests: [not_null]
+      - name: category
+        description: Merchandising category in force during this version (SCD2).
+        data_tests: [not_null]
+      - name: subcategory
+        description: Merchandising subcategory.
+        data_tests: [not_null]
+      - name: list_price
+        description: List price in force during this version (SCD2).
+        data_tests: [not_null]
+      - name: standard_cost
+        description: Standard unit cost in USD.
+        data_tests: [not_null]
+      - name: valid_from
+        description: Start of the version's validity window (snapshot capture time).
+        data_tests: [not_null]
+      - name: valid_to
+        description: End of the version's validity window (9999-12-31 for the current row).
+        data_tests: [not_null]
+      - name: is_current
+        description: True for the currently-active version.
+        data_tests: [not_null]
+
+  - name: fact_sales
+    description: >
+      Revenue fact. Grain: one row per order line. Incremental (merge on
+      order_line_id). Measures are in USD. dim_customer is joined point-in-time;
+      dim_product on its current version.
+    columns:
+      - name: order_line_id
+        description: Order-line natural key; the merge unique_key. Unique.
+        data_tests: [unique, not_null]
+      - name: order_id
+        description: Parent order identifier (degenerate dimension).
+        data_tests: [not_null]
+      - name: date_key
+        description: FK to dim_date (order date).
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+      - name: order_date
+        description: Order date (kept for convenience).
+        data_tests: [not_null]
+      - name: customer_sk
+        description: FK to dim_customer (point-in-time version).
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_sk
+      - name: product_sk
+        description: FK to dim_product (current version).
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_product')
+              field: product_sk
+      - name: region_sk
+        description: FK to dim_region.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_region')
+              field: region_sk
+      - name: channel_sk
+        description: FK to dim_channel.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_channel')
+              field: channel_sk
+      - name: is_return
+        description: True when the line is a return (negative quantity).
+        data_tests: [not_null]
+      - name: is_unknown_customer
+        description: True when the source customer id was missing.
+        data_tests: [not_null]
+      - name: currency
+        description: Original line currency (USD/EUR).
+        data_tests: [not_null]
+      - name: fx_rate_to_usd
+        description: FX rate applied to convert to USD.
+        data_tests: [not_null]
+      - name: quantity
+        description: Units sold (negative on returns).
+        data_tests: [not_null]
+      - name: gross_revenue
+        description: Gross revenue in USD (quantity * unit_price, converted).
+        data_tests: [not_null]
+      - name: discount_amount
+        description: Discount amount in USD.
+        data_tests: [not_null]
+      - name: net_revenue
+        description: Net revenue in USD (gross - discount).
+        data_tests: [not_null]
+      - name: cogs
+        description: Cost of goods sold in USD (quantity * standard_cost).
+        data_tests: [not_null]
+      - name: gross_profit
+        description: Gross profit in USD (net_revenue - cogs).
+        data_tests: [not_null]
+      - name: _loaded_at
+        description: Ingestion timestamp; the incremental watermark.
+
+  - name: fact_gl
+    description: "General-ledger fact. Grain: one row per GL posting. Measure in USD."
+    columns:
+      - name: gl_id
+        description: GL posting natural key (degenerate dimension). Unique.
+        data_tests: [unique, not_null]
+      - name: date_key
+        description: FK to dim_date (posting date).
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+      - name: posting_date
+        description: Posting date.
+        data_tests: [not_null]
+      - name: posting_month
+        description: First day of the posting month.
+        data_tests: [not_null]
+      - name: region_sk
+        description: FK to dim_region.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_region')
+              field: region_sk
+      - name: account_code
+        description: GL account code (degenerate dimension).
+        data_tests: [not_null]
+      - name: account_name
+        description: GL account name (degenerate dimension).
+        data_tests: [not_null]
+      - name: cost_center
+        description: Cost center / channel (degenerate dimension).
+        data_tests: [not_null]
+      - name: amount_usd
+        description: Posting amount in USD (revenue negative, expenses positive).
+        data_tests: [not_null]

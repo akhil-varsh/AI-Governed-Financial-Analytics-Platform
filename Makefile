@@ -13,7 +13,7 @@
 DBT = uv run dbt
 DBT_FLAGS = --project-dir dbt_project --profiles-dir dbt_project
 
-.PHONY: help setup data validate bronze bronze-dry pytest connection-test deps run build test docs lint fmt dagster clean
+.PHONY: help setup data validate bronze bronze-dry pytest connection-test deps run build test snapshots rebuild docs lint fmt dagster clean
 
 help:                 ## Show this help
 	@echo Northwind lakehouse targets:
@@ -63,6 +63,18 @@ build:                ## Build models + run tests + snapshots + seeds (the CI co
 
 test:                 ## Run all data-quality tests
 	$(DBT) test $(DBT_FLAGS)
+
+snapshots:            ## Bootstrap SCD2 product history: replay the 3 dated extracts (empty snapshot only)
+	$(DBT) snapshot $(DBT_FLAGS) --vars '{product_snapshot_as_of: "2022-02-01"}'
+	$(DBT) snapshot $(DBT_FLAGS) --vars '{product_snapshot_as_of: "2023-02-01"}'
+	$(DBT) snapshot $(DBT_FLAGS) --vars '{product_snapshot_as_of: "2024-02-01"}'
+
+rebuild:              ## Full clean local (duckdb) build: reset -> bronze -> silver -> snapshot history -> gold
+	uv run python scripts/reset_duckdb.py
+	uv run python -m ingestion.load_to_bronze --source-dir data/raw --target duckdb
+	$(DBT) build $(DBT_FLAGS) --select bronze silver region_conformance
+	$(MAKE) snapshots
+	$(DBT) build $(DBT_FLAGS) --select gold
 
 docs:                 ## Generate and serve dbt documentation
 	$(DBT) docs generate $(DBT_FLAGS)

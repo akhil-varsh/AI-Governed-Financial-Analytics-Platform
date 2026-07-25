@@ -20,6 +20,10 @@ dbt_project/dbt_packages/
 dbt_project/logs/
 .user.yml
 
+# --- DuckDB local execution database (reproducible via the pipeline) ---
+*.duckdb
+*.duckdb.wal
+
 # --- Dagster ---
 orchestration/.dagster_home/
 tmp*/

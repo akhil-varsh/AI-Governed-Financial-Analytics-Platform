@@ -23,12 +23,57 @@
     {%- endif -%}
 {%- endmacro %}
 
-{# Null-safe cast. BigQuery has SAFE_CAST; ANSI/Snowflake use TRY_CAST. #}
-{% macro try_cast(column, type) -%}
+{# Null-safe cast to a LOGICAL type, mapped to each engine's physical type and
+   null-safe function. Callers pass a logical type (integer/float/numeric/date/
+   timestamp/string), never a vendor type name, so the same model runs on both
+   BigQuery and DuckDB. BigQuery uses SAFE_CAST; DuckDB/ANSI use TRY_CAST. #}
+{% macro try_cast(column, logical_type) -%}
+    {%- set type_map = {
+        'bigquery': {'integer': 'INT64', 'float': 'FLOAT64', 'numeric': 'NUMERIC',
+                     'date': 'DATE', 'timestamp': 'TIMESTAMP', 'string': 'STRING'},
+        'default':  {'integer': 'BIGINT', 'float': 'DOUBLE', 'numeric': 'DECIMAL(38,9)',
+                     'date': 'DATE', 'timestamp': 'TIMESTAMP', 'string': 'VARCHAR'}
+    } -%}
+    {%- set dialect = 'bigquery' if target.type == 'bigquery' else 'default' -%}
+    {%- set physical = type_map[dialect][logical_type] -%}
     {%- if target.type == 'bigquery' -%}
-        SAFE_CAST({{ column }} AS {{ type }})
+        SAFE_CAST({{ column }} AS {{ physical }})
     {%- else -%}
-        TRY_CAST({{ column }} AS {{ type }})
+        TRY_CAST({{ column }} AS {{ physical }})
+    {%- endif -%}
+{%- endmacro %}
+
+{# Cast to the engine's string type (BigQuery STRING vs DuckDB VARCHAR). #}
+{% macro to_string(column) -%}
+    {%- if target.type == 'bigquery' -%}
+        CAST({{ column }} AS STRING)
+    {%- else -%}
+        CAST({{ column }} AS VARCHAR)
+    {%- endif -%}
+{%- endmacro %}
+
+{# Full month / weekday name, and a weekend flag — vendor-specific formatting. #}
+{% macro month_name(column) -%}
+    {%- if target.type == 'bigquery' -%}
+        FORMAT_DATE('%B', {{ column }})
+    {%- else -%}
+        MONTHNAME({{ column }})
+    {%- endif -%}
+{%- endmacro %}
+
+{% macro day_name(column) -%}
+    {%- if target.type == 'bigquery' -%}
+        FORMAT_DATE('%A', {{ column }})
+    {%- else -%}
+        DAYNAME({{ column }})
+    {%- endif -%}
+{%- endmacro %}
+
+{% macro is_weekend(column) -%}
+    {%- if target.type == 'bigquery' -%}
+        EXTRACT(DAYOFWEEK FROM {{ column }}) IN (1, 7)
+    {%- else -%}
+        EXTRACT(DOW FROM {{ column }}) IN (0, 6)
     {%- endif -%}
 {%- endmacro %}
 

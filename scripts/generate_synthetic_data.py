@@ -169,22 +169,22 @@ def build_customer_extracts(base: pd.DataFrame) -> dict[date, pd.DataFrame]:
     for d in CUSTOMER_EXTRACT_DATES:
         snap = base.copy()
 
-        # CUST-000001: Consumer -> SMB at the 2023 extract onward.
-        if d >= date(2023, 2, 1):
-            snap.loc[snap.customer_id == "CUST-000001", "customer_segment"] = "SMB"
-        # CUST-000002: Mid-Market -> Enterprise at the 2024 extract onward.
-        if d >= date(2024, 2, 1):
-            snap.loc[snap.customer_id == "CUST-000002", "customer_segment"] = "Enterprise"
-        # CUST-000003: SMB -> Mid-Market AND Southeast -> West at the 2023 extract.
+        # Each special customer is FULLY pinned in every extract (no leakage of the
+        # random base value), so each has a clean, single-change SCD2 history.
+
+        # CUST-000001: Consumer -> SMB at the 2023 extract.
+        snap.loc[snap.customer_id == "CUST-000001", "customer_segment"] = (
+            "SMB" if d >= date(2023, 2, 1) else "Consumer")
+
+        # CUST-000002: Mid-Market -> Enterprise at the 2024 extract (Mid-Market until then).
+        snap.loc[snap.customer_id == "CUST-000002", "customer_segment"] = (
+            "Enterprise" if d >= date(2024, 2, 1) else "Mid-Market")
+
+        # CUST-000003: SMB/Southeast -> Mid-Market/West at the 2023 extract.
         if d >= date(2023, 2, 1):
             snap.loc[snap.customer_id == "CUST-000003", "customer_segment"] = "Mid-Market"
             snap.loc[snap.customer_id == "CUST-000003", "region"] = "West"
-
-        # Force the three known customers to have a deterministic starting state
-        # at the first extract so the *change* is unambiguous.
-        if d == CUSTOMER_EXTRACT_DATES[0]:
-            snap.loc[snap.customer_id == "CUST-000001", "customer_segment"] = "Consumer"
-            snap.loc[snap.customer_id == "CUST-000002", "customer_segment"] = "Mid-Market"
+        else:
             snap.loc[snap.customer_id == "CUST-000003", "customer_segment"] = "SMB"
             snap.loc[snap.customer_id == "CUST-000003", "region"] = "Southeast"
 

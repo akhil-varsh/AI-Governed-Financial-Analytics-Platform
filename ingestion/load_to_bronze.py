@@ -64,8 +64,11 @@ def discover(source_dir: Path, contract: FeedContract) -> list[Path]:
     return sorted(source_dir.glob(contract.file_glob))
 
 
-def raw_dataset() -> str:
-    return f"{os.environ.get('DBT_BIGQUERY_DATASET', 'northwind_dev')}_raw"
+def raw_dataset(target: str = "duckdb") -> str:
+    """The Bronze landing schema/dataset, `<base>_raw`. The base matches whatever
+    schema the corresponding dbt target uses, so the dbt `raw` source lines up."""
+    base_env = "DBT_DUCKDB_SCHEMA" if target == "duckdb" else "DBT_BIGQUERY_DATASET"
+    return f"{os.environ.get(base_env, 'northwind_dev')}_raw"
 
 
 def prepare_frame(path: Path, contract: FeedContract) -> pd.DataFrame:
@@ -122,7 +125,7 @@ def land_to_bigquery(df: pd.DataFrame, contract: FeedContract, batch_id: str) ->
     from google.cloud import bigquery
 
     client = _bq_client()
-    dataset = raw_dataset()
+    dataset = raw_dataset("bigquery")
     client.create_dataset(bigquery.Dataset(f"{client.project}.{dataset}"), exists_ok=True)
     table_fqn = f"{client.project}.{dataset}.{contract.bronze_table}"
 
@@ -138,14 +141,46 @@ def land_to_bigquery(df: pd.DataFrame, contract: FeedContract, batch_id: str) ->
 
 
 # --------------------------------------------------------------------------- #
+# DuckDB side (local execution target — no cloud, no DML restriction)
+# --------------------------------------------------------------------------- #
+def land_to_duckdb(df: pd.DataFrame, contract: FeedContract, batch_id: str) -> str:
+    import duckdb  # lazy
+
+    schema = raw_dataset("duckdb")
+    table = contract.bronze_table
+    con = duckdb.connect(os.environ.get("DUCKDB_PATH", "northwind.duckdb"))
+    try:
+        con.execute(f'create schema if not exists "{schema}"')
+        fqn = f'"{schema}"."{table}"'
+        exists = con.execute(
+            "select count(*) from information_schema.tables where table_schema = ? and table_name = ?",
+            [schema, table]).fetchone()[0]
+        if exists:
+            already = con.execute(
+                f'select count(*) from {fqn} where {META_BATCH_ID} = ?', [batch_id]).fetchone()[0]
+            if already:
+                return f"skip (batch {batch_id} already loaded)"
+
+        con.register("df_v", df)
+        if exists:
+            con.execute(f"insert into {fqn} select * from df_v")
+        else:
+            con.execute(f"create table {fqn} as select * from df_v")
+        return f"appended {len(df):,} rows -> {schema}.{table} (duckdb)"
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #
-def load_feed(source_dir: Path, contract: FeedContract, dry_run: bool) -> list[str]:
+def load_feed(source_dir: Path, contract: FeedContract, dry_run: bool, target: str) -> list[str]:
     messages = []
     files = discover(source_dir, contract)
     if not files:
         return [f"{contract.feed}: no files matching {contract.file_glob!r}"]
 
+    landers = {"bigquery": land_to_bigquery, "duckdb": land_to_duckdb}
     for path in files:
         # 1. HARD GATE — validate before anything touches Bronze.
         result = validate_file(path, contract)
@@ -159,9 +194,9 @@ def load_feed(source_dir: Path, contract: FeedContract, dry_run: bool) -> list[s
         if dry_run:
             messages.append(
                 f"{contract.feed}: OK {path.name} rows={len(df):,} batch={bid} "
-                f"-> would append to {raw_dataset()}.{contract.bronze_table}")
+                f"-> would append to {raw_dataset(target)}.{contract.bronze_table} ({target})")
         else:
-            messages.append(f"{contract.feed}: {land_to_bigquery(df, contract, bid)}")
+            messages.append(f"{contract.feed}: {landers[target](df, contract, bid)}")
     return messages
 
 
@@ -169,8 +204,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate and land source files into Bronze.")
     parser.add_argument("--source-dir", default="data/raw", help="Folder containing dropped source files.")
     parser.add_argument("--feed", help="Only process this feed (default: all).")
+    parser.add_argument("--target", default=os.environ.get("BRONZE_TARGET", "duckdb"),
+                        choices=["duckdb", "bigquery"],
+                        help="Where to land Bronze (default: duckdb, the local execution engine).")
     parser.add_argument("--dry-run", action="store_true",
-                        help="Validate and print the load plan without connecting to BigQuery.")
+                        help="Validate and print the load plan without connecting to the warehouse.")
     args = parser.parse_args(argv)
 
     source_dir = Path(args.source_dir)
@@ -181,12 +219,13 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         contracts = {args.feed: contracts[args.feed]}
 
-    print(f"{'DRY RUN — ' if args.dry_run else ''}landing {len(contracts)} feed(s) from {source_dir}")
+    print(f"{'DRY RUN — ' if args.dry_run else ''}landing {len(contracts)} feed(s) "
+          f"from {source_dir} into target '{args.target}'")
     print("-" * 68)
     exit_code = 0
     for contract in contracts.values():
         try:
-            for msg in load_feed(source_dir, contract, args.dry_run):
+            for msg in load_feed(source_dir, contract, args.dry_run, args.target):
                 print(f"  {msg}")
         except ValueError as exc:
             print(f"  {exc}", file=sys.stderr)
