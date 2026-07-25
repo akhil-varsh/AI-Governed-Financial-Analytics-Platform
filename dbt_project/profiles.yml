@@ -1,0 +1,49 @@
+# dbt connection profile for the Northwind lakehouse.
+#
+# WHY this lives in-repo (not in ~/.dbt): a portfolio repo should be clonable and
+# runnable without hunting for a hidden home-directory file. The Makefile sets
+# DBT_PROFILES_DIR to this folder. NO SECRETS ARE COMMITTED — every sensitive or
+# environment-specific value is read from an env var via env_var(), which fails
+# loudly if the var is missing. Copy .env.example to .env and fill it in.
+#
+# Auth: BigQuery "service-account" using a keyfile path from DBT_BIGQUERY_KEYFILE.
+# For a personal sandbox you can switch method to "oauth" and remove keyfile
+# (see the commented block) to use `gcloud auth application-default login`.
+
+northwind:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      project: "{{ env_var('DBT_BIGQUERY_PROJECT') }}"
+      keyfile: "{{ env_var('DBT_BIGQUERY_KEYFILE') }}"
+      dataset: "{{ env_var('DBT_BIGQUERY_DATASET', 'northwind_dev') }}"
+      location: "{{ env_var('DBT_BIGQUERY_LOCATION', 'US') }}"
+      threads: 4
+      priority: interactive
+      job_execution_timeout_seconds: 300
+      job_retries: 1
+
+    # CI target: same warehouse, an isolated per-run dataset so concurrent CI
+    # builds never collide. The GitHub Actions workflow sets DBT_CI_DATASET.
+    ci:
+      type: bigquery
+      method: service-account
+      project: "{{ env_var('DBT_BIGQUERY_PROJECT') }}"
+      keyfile: "{{ env_var('DBT_BIGQUERY_KEYFILE') }}"
+      dataset: "{{ env_var('DBT_CI_DATASET', 'northwind_ci') }}"
+      location: "{{ env_var('DBT_BIGQUERY_LOCATION', 'US') }}"
+      threads: 8
+      priority: interactive
+      job_execution_timeout_seconds: 300
+      job_retries: 1
+
+    # --- Personal-sandbox alternative (OAuth, no keyfile) ---------------------
+    # sandbox:
+    #   type: bigquery
+    #   method: oauth
+    #   project: "{{ env_var('DBT_BIGQUERY_PROJECT') }}"
+    #   dataset: "{{ env_var('DBT_BIGQUERY_DATASET', 'northwind_dev') }}"
+    #   location: "US"
+    #   threads: 4

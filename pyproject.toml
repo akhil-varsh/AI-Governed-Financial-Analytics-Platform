@@ -1,0 +1,51 @@
+[project]
+name = "northwind-lakehouse"
+version = "0.1.0"
+description = "PE value-creation reporting platform for Northwind Retail Co — medallion lakehouse (dbt + BigQuery + Dagster)."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+authors = [{ name = "Akhil Varsh Pettem" }]
+
+# Runtime dependencies: ingestion + contract validation.
+# Kept deliberately lean — the warehouse does the heavy lifting, not Python.
+dependencies = [
+    "pandas>=2.2,<2.3",
+    "numpy>=1.26,<2.1",
+    "pyyaml>=6.0,<7.0",
+    "pydantic>=2.7,<3.0",       # data-contract validation at ingestion time
+    "python-dateutil>=2.9,<3.0",
+]
+
+[project.optional-dependencies]
+# The transformation + orchestration stack. Kept as an extra so a thin
+# ingestion-only environment (e.g. a lightweight loader container) does not
+# have to pull in dbt/Dagster.
+platform = [
+    "dbt-core>=1.9,<1.10",
+    "dbt-bigquery>=1.9,<1.10",
+    "dagster>=1.9,<1.11",
+    "dagster-dbt>=0.25,<0.27",
+    "dagster-webserver>=1.9,<1.11",
+]
+
+# Developer tooling: linting, testing, hooks. Not shipped to any runtime.
+dev = [
+    "sqlfluff>=3.2,<4.0",
+    "sqlfluff-templater-dbt>=3.2,<4.0",
+    "pytest>=8.2,<9.0",
+    "pre-commit>=3.7,<4.0",
+]
+
+[tool.uv]
+# Resolve platform + dev extras together so the lockfile is complete and CI is
+# reproducible. Override on a slim runtime with `uv sync --no-dev --no-extra platform`.
+default-groups = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# This repo is a project, not a distributable library. Point the builder at the
+# ingestion package so `uv sync` doesn't fail trying to auto-discover a package.
+packages = ["ingestion"]

@@ -1,0 +1,60 @@
+name: "northwind"
+version: "0.1.0"
+config-version: 2
+
+# The profile ties this project to a warehouse connection. The connection
+# details live in profiles.yml (in this same folder — see Makefile, which sets
+# DBT_PROFILES_DIR). Keeping profiles.yml in-repo makes onboarding one step,
+# while the real secrets are injected via env vars, never committed.
+profile: "northwind"
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# --- Naming: medallion layers map to distinct schemas/datasets. -------------
+# Each layer lands in its own BigQuery dataset (bronze / silver / gold / marts)
+# via the custom generate_schema_name macro (see macros/). This keeps the
+# warehouse browsable by layer and lets us grant read access to `marts` only.
+models:
+  northwind:
+    bronze:
+      +materialized: view          # Bronze is a thin typed view over raw landed data
+      +schema: bronze
+    silver:
+      +materialized: table         # Silver is cleaned/conformed — materialize for downstream speed
+      +schema: silver
+    gold:
+      +materialized: table
+      +schema: gold
+    marts:
+      +materialized: table
+      +schema: marts
+
+# Snapshots (SCD2 via dbt) land alongside gold history.
+snapshots:
+  northwind:
+    +target_schema: snapshots
+
+seeds:
+  northwind:
+    +schema: bronze
+    fx_rates:
+      +column_types:
+        rate_date: date
+        from_currency: string
+        to_currency: string
+        rate: numeric
+
+# Surface project-wide vars here so warehouse-specific or business constants are
+# declared in one place (fiscal year start month is used by dim_date).
+vars:
+  fiscal_year_start_month: 2   # Northwind's fiscal year starts in February
+  reporting_currency: "USD"

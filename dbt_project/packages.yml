@@ -1,0 +1,11 @@
+packages:
+  # dbt_utils: surrogate keys, generic tests (unique_combination_of_columns,
+  # not_null_proportion), cross-db helpers that keep our SQL portable.
+  - package: dbt-labs/dbt_utils
+    version: [">=1.3.0", "<2.0.0"]
+
+  # dbt_date: calendar/fiscal-date helpers used to generate dim_date with a
+  # non-January fiscal year start. (godatadriven is the maintained fork of the
+  # original calogica package.)
+  - package: godatadriven/dbt_date
+    version: [">=0.10.0", "<1.0.0"]
