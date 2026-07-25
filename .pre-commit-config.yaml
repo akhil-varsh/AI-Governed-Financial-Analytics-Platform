@@ -1,0 +1,31 @@
+# Pre-commit hooks: run the same lint/tests locally that CI enforces, so issues
+# are caught before they reach a push. Install once with `uv run pre-commit install`.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '^docs/dbt_docs/'          # generated site
+      - id: end-of-file-fixer
+        exclude: '^docs/dbt_docs/'
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+
+  # Project-specific checks run through uv so they use the pinned environment.
+  - repo: local
+    hooks:
+      - id: sqlfluff-lint
+        name: sqlfluff lint (dbt models)
+        entry: uv run sqlfluff lint dbt_project/models
+        language: system
+        pass_filenames: false
+        files: \.sql$
+
+      - id: pytest-ingestion
+        name: pytest (ingestion contract tests)
+        entry: uv run pytest ingestion/tests -q
+        language: system
+        pass_filenames: false
+        files: '^ingestion/.*\.py$'

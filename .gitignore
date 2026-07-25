@@ -26,6 +26,8 @@ dbt_project/logs/
 
 # --- Dagster ---
 orchestration/.dagster_home/
+.dagster_home/
+.tmp_dagster_home*/
 tmp*/
 *.tmp
 

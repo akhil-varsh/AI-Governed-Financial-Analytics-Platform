@@ -69,12 +69,12 @@ snapshots:            ## Bootstrap SCD2 product history: replay the 3 dated extr
 	$(DBT) snapshot $(DBT_FLAGS) --vars '{product_snapshot_as_of: "2023-02-01"}'
 	$(DBT) snapshot $(DBT_FLAGS) --vars '{product_snapshot_as_of: "2024-02-01"}'
 
-rebuild:              ## Full clean local (duckdb) build: reset -> bronze -> silver -> snapshot history -> gold
+rebuild:              ## Full clean local (duckdb) build: reset -> bronze -> silver -> snapshot history -> gold -> marts
 	uv run python scripts/reset_duckdb.py
 	uv run python -m ingestion.load_to_bronze --source-dir data/raw --target duckdb
-	$(DBT) build $(DBT_FLAGS) --select bronze silver region_conformance
+	$(DBT) build $(DBT_FLAGS) --select bronze silver region_conformance --indirect-selection cautious
 	$(MAKE) snapshots
-	$(DBT) build $(DBT_FLAGS) --select gold
+	$(DBT) build $(DBT_FLAGS) --select gold marts
 
 docs:                 ## Generate and serve dbt documentation (live server)
 	$(DBT) docs generate $(DBT_FLAGS)

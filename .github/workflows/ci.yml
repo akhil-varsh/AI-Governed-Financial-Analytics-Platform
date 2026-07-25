@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+# The pipeline runs on DuckDB, so CI needs NO cloud credentials. An isolated CI
+# schema and DB file keep runs self-contained. Absolute DUCKDB_PATH ensures the
+# ingestion loader and dbt open the exact same database file.
+env:
+  DUCKDB_PATH: ${{ github.workspace }}/northwind_ci.duckdb
+  DBT_DUCKDB_SCHEMA: northwind_ci
+
+jobs:
+  build:
+    name: lint + build + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.11 and dependencies
+        run: |
+          uv python install 3.11
+          uv sync --extra platform --extra dev
+
+      - name: Install dbt packages
+        run: uv run dbt deps --project-dir dbt_project --profiles-dir dbt_project
+
+      # --- 1. LINT ---------------------------------------------------------- #
+      - name: Lint SQL (sqlfluff)
+        run: uv run sqlfluff lint dbt_project/models
+
+      # --- 2. Python unit tests (contract validator) ------------------------ #
+      - name: Python tests
+        run: uv run pytest ingestion/tests -q
+
+      # --- 3. Generate the reproducible dataset ----------------------------- #
+      - name: Generate synthetic data
+        run: uv run python scripts/generate_synthetic_data.py
+
+      # --- 4. Ingest to Bronze (validates each file against its contract) ---- #
+      - name: Land Bronze
+        run: uv run python -m ingestion.load_to_bronze --source-dir data/raw --target duckdb
+
+      # --- 5. BUILD + TEST (any test failure fails the job) ----------------- #
+      # cautious indirect selection: don't run cross-layer tests (e.g. fact-vs-source
+      # row count) until their downstream model exists — it's built two steps later.
+      - name: Build Bronze + Silver (+ seed) and test
+        run: uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --select bronze silver region_conformance --indirect-selection cautious
+
+      - name: Bootstrap SCD2 product snapshot history
+        run: |
+          for d in 2022-02-01 2023-02-01 2024-02-01; do
+            uv run dbt snapshot --project-dir dbt_project --profiles-dir dbt_project \
+              --vars "{product_snapshot_as_of: \"$d\"}"
+          done
+
+      - name: Build Gold + marts and test
+        run: uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --select gold marts
+
+      # --- 6. Source freshness (tier-1 data quality) ------------------------ #
+      - name: Source freshness
+        run: uv run dbt source freshness --project-dir dbt_project --profiles-dir dbt_project
