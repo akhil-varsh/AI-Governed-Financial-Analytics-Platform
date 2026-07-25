@@ -1,0 +1,118 @@
+version: 2
+
+models:
+  - name: monthly_revenue_bridge
+    description: >
+      Board-facing monthly revenue bridge. Composition bridge (gross sales −
+      discounts + returns = net revenue) and period bridge (prior-month net + MoM
+      change = this-month net), plus gross margin. Grain: one row per calendar month.
+    data_tests:
+      # Exact reconciliation: the return/non-return split of net revenue sums back
+      # to net_revenue (same column, so it holds to the cent).
+      - dbt_utils.expression_is_true:
+          expression: "round(sales_net + returns, 2) = round(net_revenue, 2)"
+    columns:
+      - name: month_start
+        description: First day of the calendar month.
+        data_tests: [unique, not_null]
+      - name: fiscal_year
+        description: Fiscal year (February start).
+        data_tests: [not_null]
+      - name: fiscal_year_label
+        description: Fiscal year label, e.g. 'FY2023'.
+      - name: fiscal_month
+        description: Fiscal month (February = 1 … January = 12).
+        data_tests: [not_null]
+      - name: gross_sales
+        description: Gross revenue from sales lines (returns excluded), USD.
+        data_tests: [not_null]
+      - name: discounts
+        description: Discounts on sales lines, USD.
+        data_tests: [not_null]
+      - name: sales_net
+        description: Net revenue from sales lines (returns excluded), USD.
+        data_tests: [not_null]
+      - name: returns
+        description: Net revenue from return lines (negative), USD.
+        data_tests: [not_null]
+      - name: net_revenue
+        description: Net revenue for the month, USD (= gross_sales − discounts + returns).
+        data_tests: [not_null]
+      - name: prior_net_revenue
+        description: Previous month's net revenue (null for the first month).
+      - name: mom_change
+        description: Net revenue change vs the previous month, USD.
+      - name: mom_change_pct
+        description: Month-over-month net revenue change, percent.
+      - name: cogs
+        description: Cost of goods sold for the month, USD.
+        data_tests: [not_null]
+      - name: gross_profit
+        description: Gross profit for the month, USD.
+        data_tests: [not_null]
+      - name: gross_margin_pct
+        description: Gross margin percent (gross_profit / net_revenue).
+      - name: order_lines
+        description: Number of order lines in the month.
+        data_tests: [not_null]
+
+  - name: gross_margin_by_segment
+    description: >
+      Net revenue, COGS, and gross margin % by customer segment (point-in-time
+      from SCD2 dim_customer) and fiscal year. Grain: one row per
+      (fiscal_year, customer_segment).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [fiscal_year, customer_segment]
+    columns:
+      - name: fiscal_year
+        description: Fiscal year (February start).
+        data_tests: [not_null]
+      - name: fiscal_year_label
+        description: Fiscal year label, e.g. 'FY2023'.
+      - name: customer_segment
+        description: Customer segment as-was during the sale (SCD2).
+        data_tests: [not_null]
+      - name: order_lines
+        description: Number of order lines.
+        data_tests: [not_null]
+      - name: active_customers
+        description: Distinct customers with activity in the segment/year.
+        data_tests: [not_null]
+      - name: net_revenue
+        description: Net revenue, USD.
+        data_tests: [not_null]
+      - name: cogs
+        description: Cost of goods sold, USD.
+        data_tests: [not_null]
+      - name: gross_profit
+        description: Gross profit, USD.
+        data_tests: [not_null]
+      - name: gross_margin_pct
+        description: Gross margin percent.
+
+  - name: customer_cohort_retention
+    description: >
+      Acquisition-cohort retention. Customers grouped by first-purchase month;
+      for each subsequent month, the share of the cohort that purchased again.
+      Excludes unknown customers and pure returns. Grain: one row per
+      (cohort_month, period_number).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [cohort_month, period_number]
+    columns:
+      - name: cohort_month
+        description: Calendar month of the cohort's first purchase.
+        data_tests: [not_null]
+      - name: cohort_size
+        description: Number of customers acquired in the cohort month.
+        data_tests: [not_null]
+      - name: period_number
+        description: Months elapsed since acquisition (0 = acquisition month).
+        data_tests: [not_null]
+      - name: active_customers
+        description: Distinct cohort customers active in this period.
+        data_tests: [not_null]
+      - name: retention_pct
+        description: active_customers / cohort_size, percent (100 at period 0).
+        data_tests: [not_null]

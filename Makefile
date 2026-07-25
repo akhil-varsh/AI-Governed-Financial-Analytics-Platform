@@ -13,7 +13,7 @@
 DBT = uv run dbt
 DBT_FLAGS = --project-dir dbt_project --profiles-dir dbt_project
 
-.PHONY: help setup data validate bronze bronze-dry pytest connection-test deps run build test snapshots rebuild docs lint fmt dagster clean
+.PHONY: help setup data validate bronze bronze-dry pytest connection-test deps run build test snapshots rebuild docs docs-static freshness lint fmt dagster clean
 
 help:                 ## Show this help
 	@echo Northwind lakehouse targets:
@@ -76,9 +76,16 @@ rebuild:              ## Full clean local (duckdb) build: reset -> bronze -> sil
 	$(MAKE) snapshots
 	$(DBT) build $(DBT_FLAGS) --select gold
 
-docs:                 ## Generate and serve dbt documentation
+docs:                 ## Generate and serve dbt documentation (live server)
 	$(DBT) docs generate $(DBT_FLAGS)
 	$(DBT) docs serve $(DBT_FLAGS)
+
+docs-static:          ## Generate docs and refresh the committed snapshot in docs/dbt_docs
+	$(DBT) docs generate $(DBT_FLAGS)
+	uv run python -c "import shutil,os; d='docs/dbt_docs'; os.makedirs(d,exist_ok=True); [shutil.copy(f'dbt_project/target/{f}',d) for f in ('index.html','manifest.json','catalog.json')]"
+
+freshness:            ## Run source freshness checks (tier-1 data quality)
+	$(DBT) source freshness $(DBT_FLAGS)
 
 lint:                 ## Lint SQL with sqlfluff
 	uv run sqlfluff lint dbt_project/models

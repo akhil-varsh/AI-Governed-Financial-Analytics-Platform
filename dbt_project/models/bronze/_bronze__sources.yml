@@ -26,20 +26,29 @@ sources:
         columns:
           - name: order_line_id
             description: POS-assigned order-line natural key (string; not unique at Bronze due to injected duplicates).
+            data_tests: [not_null]
           - name: order_id
             description: Parent order identifier.
+            data_tests: [not_null]
           - name: order_date
             description: Transaction date (string in Bronze; typed in the view).
+            data_tests: [not_null]
           - name: customer_id
             description: Customer natural key; may be null (injected missingness).
           - name: product_id
             description: Product natural key.
+            data_tests: [not_null]
           - name: region
             description: Raw region label; spelling is inconsistent and conformed downstream.
           - name: channel
             description: Sales channel (Retail/Online/Wholesale).
+            data_tests:
+              - not_null
+              - accepted_values:
+                  values: ["Retail", "Online", "Wholesale"]
           - name: quantity
             description: Units; negative for returns.
+            data_tests: [not_null]
           - name: unit_price
             description: Per-unit list price in the line currency.
           - name: discount_pct
@@ -52,6 +61,10 @@ sources:
             description: gross_revenue - discount_amount in line currency.
           - name: currency
             description: ISO currency of monetary columns (USD/EUR).
+            data_tests:
+              - not_null
+              - accepted_values:
+                  values: ["USD", "EUR"]
           - name: _loaded_at
             description: Ingestion timestamp (UTC).
           - name: _source_file
@@ -66,10 +79,16 @@ sources:
         columns:
           - name: gl_id
             description: Unique GL posting id.
+            data_tests: [not_null, unique]
           - name: posting_date
             description: Posting date (string in Bronze).
+            data_tests: [not_null]
           - name: account_code
             description: GL account code (4000 revenue, 5000 COGS, 6xxx opex).
+            data_tests:
+              - not_null
+              - accepted_values:
+                  values: ["4000", "5000", "6000", "6100", "6200"]
           - name: account_name
             description: Account name.
           - name: region
@@ -102,8 +121,16 @@ sources:
             description: Customer display name.
           - name: customer_segment
             description: Commercial segment (SCD2-tracked downstream).
+            data_tests:
+              - not_null
+              - accepted_values:
+                  values: ["Consumer", "SMB", "Mid-Market", "Enterprise"]
           - name: region
             description: Home region (SCD2-tracked downstream).
+            data_tests:
+              - not_null
+              - accepted_values:
+                  values: ["Northeast", "Southeast", "Midwest", "West"]
           - name: signup_date
             description: Onboarding date (may predate the reporting window).
           - name: _loaded_at
@@ -126,6 +153,10 @@ sources:
             description: Product description (SCD1-tracked downstream).
           - name: category
             description: Merchandising category (SCD2-tracked downstream).
+            data_tests:
+              - not_null
+              - accepted_values:
+                  values: ["Apparel", "Footwear", "Accessories", "Home & Living", "Outdoor", "Beauty"]
           - name: subcategory
             description: Merchandising subcategory.
           - name: list_price
