@@ -37,3 +37,13 @@
 {% macro scd_end_of_time() -%}
     CAST('9999-12-31' AS DATE)
 {%- endmacro %}
+
+{# Truncate a date to the first of its month. BigQuery takes the part as a bare
+   keyword AFTER the column; Snowflake/DuckDB take it as a quoted string BEFORE. #}
+{% macro date_trunc_month(column) -%}
+    {%- if target.type == 'bigquery' -%}
+        DATE_TRUNC({{ column }}, MONTH)
+    {%- else -%}
+        DATE_TRUNC('month', {{ column }})
+    {%- endif -%}
+{%- endmacro %}

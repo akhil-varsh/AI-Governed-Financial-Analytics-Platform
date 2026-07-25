@@ -1,0 +1,46 @@
+feed: product_master
+description: >
+  Full product-master extract, delivered as periodic dated dumps (one file per
+  extract_date). Description changes are tracked SCD Type 1 (overwrite), while
+  category and list_price changes are tracked SCD Type 2 in dim_product.
+source_system: PIM-Master
+file_glob: "product_master_*.csv"
+bronze_table: raw_product_master
+primary_key: [product_id, extract_date]
+enforce_primary_key_unique: true
+
+columns:
+  - name: extract_date
+    dtype: date
+    nullable: false
+    min: "2022-02-01"
+    max: "2024-02-01"
+    description: The date this full extract was taken. Part of the natural key.
+  - name: product_id
+    dtype: string
+    nullable: false
+    regex: "^PROD-\\d{4}$"
+    description: Product natural key.
+  - name: description
+    dtype: string
+    nullable: false
+    description: Product description. Tracked SCD Type 1 (latest value overwrites, no history).
+  - name: category
+    dtype: string
+    nullable: false
+    allowed_values: ["Apparel", "Footwear", "Accessories", "Home & Living", "Outdoor", "Beauty"]
+    description: Merchandising category. Tracked SCD Type 2.
+  - name: subcategory
+    dtype: string
+    nullable: false
+    description: Merchandising subcategory.
+  - name: list_price
+    dtype: numeric
+    nullable: false
+    min: 0
+    description: Catalogue list price in USD. Tracked SCD Type 2.
+  - name: standard_cost
+    dtype: numeric
+    nullable: false
+    min: 0
+    description: Standard unit cost in USD, used to derive COGS and gross margin.

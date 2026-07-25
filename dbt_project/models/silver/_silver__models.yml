@@ -1,0 +1,241 @@
+version: 2
+
+models:
+  - name: silver_orders
+    description: >
+      Cleaned, conformed sales order lines. Resolves the four injected POS
+      problems — deduplicates on order_line_id, conforms 20 region spellings to 4
+      canonical regions, resolves null customer ids to the 'UNKNOWN' member, and
+      converts EUR monetary values to USD via monthly FX. Returns (negative
+      quantity) are kept and flagged. Grain: one row per order_line_id.
+    columns:
+      - name: order_line_id
+        description: Order-line natural key. Unique after dedup.
+        data_tests: [unique, not_null]
+      - name: order_id
+        description: Parent order identifier.
+        data_tests: [not_null]
+      - name: order_date
+        description: Transaction date.
+        data_tests: [not_null]
+      - name: order_month
+        description: First day of the order's calendar month (join key to FX and dim_date).
+        data_tests: [not_null]
+      - name: customer_id
+        description: Customer natural key, with nulls resolved to the 'UNKNOWN' sentinel.
+        data_tests: [not_null]
+      - name: is_unknown_customer
+        description: True when the source customer_id was missing and resolved to 'UNKNOWN'.
+        data_tests: [not_null]
+      - name: product_id
+        description: Product natural key.
+        data_tests: [not_null]
+      - name: region
+        description: Conformed canonical region.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["Northeast", "Southeast", "Midwest", "West", "Unknown"]
+      - name: region_raw
+        description: The original, possibly dirty, region label as captured at POS (kept for audit).
+      - name: channel
+        description: Sales channel (Retail/Online/Wholesale).
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["Retail", "Online", "Wholesale"]
+      - name: quantity
+        description: Units; negative on returns.
+        data_tests: [not_null]
+      - name: is_return
+        description: True when quantity < 0 (a customer return).
+        data_tests: [not_null]
+      - name: currency
+        description: Original line currency (USD/EUR).
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["USD", "EUR"]
+      - name: unit_price
+        description: Per-unit list price in the original line currency.
+        data_tests: [not_null]
+      - name: discount_pct
+        description: Fractional discount applied (0–1).
+        data_tests: [not_null]
+      - name: gross_revenue
+        description: quantity * unit_price in the original line currency.
+        data_tests: [not_null]
+      - name: discount_amount
+        description: Discount value in the original line currency (negative on returns).
+        data_tests: [not_null]
+      - name: net_revenue
+        description: gross_revenue - discount_amount in the original line currency.
+        data_tests: [not_null]
+      - name: fx_rate_to_usd
+        description: FX rate applied to convert the line currency to USD (1 for USD lines).
+        data_tests: [not_null]
+      - name: gross_revenue_usd
+        description: Gross revenue converted to USD.
+        data_tests: [not_null]
+      - name: discount_amount_usd
+        description: Discount amount converted to USD.
+        data_tests: [not_null]
+      - name: net_revenue_usd
+        description: Net revenue converted to USD (the reporting measure).
+        data_tests: [not_null]
+      - name: _loaded_at
+        description: Ingestion timestamp carried from Bronze.
+      - name: _source_file
+        description: Originating file name carried from Bronze.
+      - name: _batch_id
+        description: Source-file content hash carried from Bronze.
+
+  - name: silver_customers
+    description: >
+      Conformed customer-master history — one row per customer per dated extract,
+      trimmed and de-double-loaded. Retains version history for Gold's SCD2
+      dim_customer. Grain: one row per (customer_id, extract_date).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [customer_id, extract_date]
+    columns:
+      - name: customer_id
+        description: Customer natural key.
+        data_tests: [not_null]
+      - name: extract_date
+        description: Date of the full extract this version came from.
+        data_tests: [not_null]
+      - name: customer_name
+        description: Trimmed customer display name.
+        data_tests: [not_null]
+      - name: customer_segment
+        description: Commercial segment (SCD2-tracked in Gold).
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["Consumer", "SMB", "Mid-Market", "Enterprise"]
+      - name: region
+        description: Customer home region (SCD2-tracked in Gold).
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["Northeast", "Southeast", "Midwest", "West"]
+      - name: signup_date
+        description: Onboarding date (may predate the reporting window).
+        data_tests: [not_null]
+      - name: _loaded_at
+        description: Ingestion timestamp carried from Bronze.
+      - name: _source_file
+        description: Originating file name carried from Bronze.
+      - name: _batch_id
+        description: Source-file content hash carried from Bronze.
+
+  - name: silver_products
+    description: >
+      Conformed product-master history — one row per product per dated extract,
+      trimmed and de-double-loaded. Retains version history for Gold's dim_product
+      (SCD1 on description, SCD2 on category/list_price). Grain: one row per
+      (product_id, extract_date).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [product_id, extract_date]
+    columns:
+      - name: product_id
+        description: Product natural key.
+        data_tests: [not_null]
+      - name: extract_date
+        description: Date of the full extract this version came from.
+        data_tests: [not_null]
+      - name: description
+        description: Trimmed product description (SCD1 in Gold).
+        data_tests: [not_null]
+      - name: category
+        description: Merchandising category (SCD2 in Gold).
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["Apparel", "Footwear", "Accessories", "Home & Living", "Outdoor", "Beauty"]
+      - name: subcategory
+        description: Merchandising subcategory.
+        data_tests: [not_null]
+      - name: list_price
+        description: Catalogue list price in USD (SCD2 in Gold).
+        data_tests: [not_null]
+      - name: standard_cost
+        description: Standard unit cost in USD, used for COGS/margin.
+        data_tests: [not_null]
+      - name: _loaded_at
+        description: Ingestion timestamp carried from Bronze.
+      - name: _source_file
+        description: Originating file name carried from Bronze.
+      - name: _batch_id
+        description: Source-file content hash carried from Bronze.
+
+  - name: silver_gl
+    description: >
+      Conformed general-ledger postings — typed, de-double-loaded, with a derived
+      posting_month for period roll-ups. Grain: one row per gl_id.
+    columns:
+      - name: gl_id
+        description: GL posting natural key.
+        data_tests: [unique, not_null]
+      - name: posting_date
+        description: Date the entry was posted.
+        data_tests: [not_null]
+      - name: posting_month
+        description: First day of the posting month (roll-up / join key).
+        data_tests: [not_null]
+      - name: account_code
+        description: GL account code.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["4000", "5000", "6000", "6100", "6200"]
+      - name: account_name
+        description: Account name.
+        data_tests: [not_null]
+      - name: region
+        description: Attributed region.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["Northeast", "Southeast", "Midwest", "West"]
+      - name: cost_center
+        description: Cost center / channel.
+        data_tests: [not_null]
+      - name: amount_usd
+        description: Posting amount in USD (revenue negative, expenses positive).
+        data_tests: [not_null]
+      - name: currency
+        description: Ledger currency (USD).
+        data_tests: [not_null]
+      - name: source_system
+        description: Source system tag from the extract.
+      - name: _loaded_at
+        description: Ingestion timestamp carried from Bronze.
+      - name: _source_file
+        description: Originating file name carried from Bronze.
+      - name: _batch_id
+        description: Source-file content hash carried from Bronze.
+
+  - name: silver_fx_rates
+    description: >
+      Conformed monthly FX rates keyed by month and currency pair, de-duplicated
+      to a single rate per key. Grain: one row per (rate_month, from_currency,
+      to_currency).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [rate_month, from_currency, to_currency]
+    columns:
+      - name: rate_month
+        description: First day of the month the rate applies to.
+        data_tests: [not_null]
+      - name: from_currency
+        description: Source currency of the pair.
+        data_tests: [not_null]
+      - name: to_currency
+        description: Target (reporting) currency, always USD.
+        data_tests: [not_null]
+      - name: rate
+        description: Multiplicative conversion rate from->to.
+        data_tests: [not_null]

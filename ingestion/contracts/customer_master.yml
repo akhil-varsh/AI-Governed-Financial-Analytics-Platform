@@ -1,0 +1,44 @@
+feed: customer_master
+description: >
+  Full customer-master extract from the source system, delivered as periodic
+  dated dumps (one file per extract_date). Clean at source; the only "change"
+  across extracts is the deliberate segment/region history for three customers,
+  which is legitimate and drives dim_customer SCD Type 2.
+source_system: CRM-Master
+file_glob: "customer_master_*.csv"
+bronze_table: raw_customer_master
+primary_key: [customer_id, extract_date]
+enforce_primary_key_unique: true
+
+columns:
+  - name: extract_date
+    dtype: date
+    nullable: false
+    min: "2022-02-01"
+    max: "2024-02-01"
+    description: The date this full extract was taken. Part of the natural key.
+  - name: customer_id
+    dtype: string
+    nullable: false
+    regex: "^CUST-\\d{6}$"
+    description: Customer natural key.
+  - name: customer_name
+    dtype: string
+    nullable: false
+    description: Customer display name (person for Consumer/SMB, company for Mid-Market/Enterprise).
+  - name: customer_segment
+    dtype: string
+    nullable: false
+    allowed_values: ["Consumer", "SMB", "Mid-Market", "Enterprise"]
+    description: Commercial segment. Tracked as SCD Type 2 — changes create new history rows.
+  - name: region
+    dtype: string
+    nullable: false
+    allowed_values: ["Northeast", "Southeast", "Midwest", "West"]
+    description: Customer home region. Tracked as SCD Type 2.
+  - name: signup_date
+    dtype: date
+    nullable: false
+    min: "2020-01-01"
+    max: "2025-01-31"
+    description: Date the customer first onboarded (may predate the reporting window).

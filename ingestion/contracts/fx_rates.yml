@@ -1,0 +1,32 @@
+feed: fx_rates
+description: >
+  Monthly foreign-exchange reference rates used to convert non-USD sales to the
+  USD reporting currency in Silver. One row per month per currency pair.
+source_system: Treasury-FX
+file_glob: "fx_rates.csv"
+bronze_table: raw_fx_rates
+primary_key: [rate_date, from_currency, to_currency]
+enforce_primary_key_unique: true
+
+columns:
+  - name: rate_date
+    dtype: date
+    nullable: false
+    min: "2022-02-01"
+    max: "2025-01-31"
+    description: First day of the month the rate applies to.
+  - name: from_currency
+    dtype: string
+    nullable: false
+    allowed_values: ["USD", "EUR"]
+    description: Source currency of the pair.
+  - name: to_currency
+    dtype: string
+    nullable: false
+    allowed_values: ["USD"]
+    description: Target (reporting) currency. Always USD here.
+  - name: rate
+    dtype: numeric
+    nullable: false
+    min: 0
+    description: Multiplicative rate to convert one unit of from_currency into to_currency.

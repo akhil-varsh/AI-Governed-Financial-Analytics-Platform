@@ -1,0 +1,55 @@
+feed: gl_extract
+description: >
+  General-ledger postings from the ERP. One row per GL posting. Revenue (4000)
+  and COGS (5000) reconcile to the sales facts by construction; operating-expense
+  accounts (6xxx) are additional. This feed is clean at source, so the contract
+  is strict.
+source_system: ERP-GL
+file_glob: "gl_extract.csv"
+bronze_table: raw_gl_extract
+primary_key: [gl_id]
+enforce_primary_key_unique: true
+
+columns:
+  - name: gl_id
+    dtype: string
+    nullable: false
+    regex: "^GL-\\d{7}$"
+    description: Unique GL posting identifier.
+  - name: posting_date
+    dtype: date
+    nullable: false
+    min: "2022-02-01"
+    max: "2025-01-31"
+    description: Date the entry was posted to the ledger.
+  - name: account_code
+    dtype: string
+    nullable: false
+    allowed_values: ["4000", "5000", "6000", "6100", "6200"]
+    description: GL account code (4000 revenue, 5000 COGS, 6xxx operating expense).
+  - name: account_name
+    dtype: string
+    nullable: false
+    description: Human-readable account name.
+  - name: region
+    dtype: string
+    nullable: false
+    allowed_values: ["Northeast", "Southeast", "Midwest", "West"]
+    description: Region the posting is attributed to (clean at source).
+  - name: cost_center
+    dtype: string
+    nullable: false
+    description: Cost center / channel the posting rolls up to.
+  - name: amount_usd
+    dtype: numeric
+    nullable: false
+    description: Posting amount in USD. Revenue is credited (negative); expenses are debited (positive).
+  - name: currency
+    dtype: string
+    nullable: false
+    allowed_values: ["USD"]
+    description: GL is maintained in USD only.
+  - name: source_system
+    dtype: string
+    nullable: false
+    description: Originating system tag carried on the extract.

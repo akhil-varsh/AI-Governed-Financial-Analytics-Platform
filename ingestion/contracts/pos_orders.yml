@@ -1,0 +1,88 @@
+feed: pos_orders
+description: >
+  Point-of-sale order lines from the POS system. One row per order line. This is
+  the primary revenue fact source. It arrives dirty by design (duplicates, dirty
+  region spellings, null customer ids, return quantities, mixed currency); the
+  contract is written to ALLOW that known messiness and only reject genuine
+  corruption.
+source_system: POS
+file_glob: "pos_orders.csv"
+bronze_table: raw_pos_orders
+primary_key: [order_line_id]
+# Duplicates are injected on purpose (~2%); uniqueness is enforced AFTER Silver
+# dedup, not at the ingestion gate. Rejecting the batch for dups would be wrong.
+enforce_primary_key_unique: false
+
+columns:
+  - name: order_line_id
+    dtype: string
+    nullable: false
+    regex: "^OL-\\d{8}$"
+    description: Natural key for the order line (POS-assigned). Not unique at Bronze due to injected duplicates.
+  - name: order_id
+    dtype: string
+    nullable: false
+    regex: "^ORD-\\d{7}$"
+    description: Parent order identifier; an order groups one or more lines.
+  - name: order_date
+    dtype: date
+    nullable: false
+    min: "2022-02-01"
+    max: "2025-01-31"
+    description: Date the order line was transacted. Bounded to the three-fiscal-year window.
+  - name: customer_id
+    dtype: string
+    nullable: true            # nulls injected (~0.3%); allowed here, quarantined/flagged in Silver
+    regex: "^CUST-\\d{6}$"
+    description: Customer natural key. Nullable — missing ids are resolved to an "unknown customer" in Silver.
+  - name: product_id
+    dtype: string
+    nullable: false
+    regex: "^PROD-\\d{4}$"
+    description: Product natural key.
+  - name: region
+    dtype: string
+    nullable: false
+    # No allowed_values on purpose: dirty spellings (e.g. "northeast", "N. East")
+    # are expected and conformed to dim_region in Silver, not rejected here.
+    description: Raw region label as captured at POS. Spelling is inconsistent; conformed downstream.
+  - name: channel
+    dtype: string
+    nullable: false
+    allowed_values: ["Retail", "Online", "Wholesale"]
+    description: Sales channel. Clean at source, so a strict domain is enforced.
+  - name: quantity
+    dtype: integer
+    nullable: false
+    # No min: negative quantities are legitimate customer returns.
+    description: Units sold. Negative values represent returns and must net correctly, not be dropped.
+  - name: unit_price
+    dtype: numeric
+    nullable: false
+    min: 0
+    description: Per-unit list price in the line currency before discount.
+  - name: discount_pct
+    dtype: float
+    nullable: false
+    min: 0
+    max: 1
+    description: Fractional discount applied to the line (0.00–1.00).
+  - name: gross_revenue
+    dtype: numeric
+    nullable: false
+    description: quantity * unit_price in the line currency (can be negative for returns).
+  - name: discount_amount
+    dtype: numeric
+    nullable: false
+    # No min: a return (negative quantity -> negative gross) reverses the original
+    # discount, so discount_amount is legitimately negative on return lines.
+    description: Discount value in the line currency; negative on return lines (mirrors the gross sign).
+  - name: net_revenue
+    dtype: numeric
+    nullable: false
+    description: gross_revenue - discount_amount in the line currency (can be negative for returns).
+  - name: currency
+    dtype: string
+    nullable: false
+    allowed_values: ["USD", "EUR"]
+    description: ISO currency of the monetary columns. EUR is converted to USD in Silver via fx_rates.

@@ -13,7 +13,7 @@
 DBT = uv run dbt
 DBT_FLAGS = --project-dir dbt_project --profiles-dir dbt_project
 
-.PHONY: help setup data connection-test deps run build test docs lint fmt dagster clean
+.PHONY: help setup data validate bronze bronze-dry pytest connection-test deps run build test docs lint fmt dagster clean
 
 help:                 ## Show this help
 	@echo Northwind lakehouse targets:
@@ -39,6 +39,18 @@ deps:                 ## Install/refresh dbt packages only
 
 data:                 ## Generate the reproducible synthetic dataset
 	uv run python scripts/generate_synthetic_data.py
+
+validate:             ## Validate every file in data/raw against its data contract
+	uv run python -c "import glob,subprocess,sys; [subprocess.run([sys.executable,'-m','ingestion.validate','--file',f],check=False) for f in glob.glob('data/raw/*.csv')]"
+
+bronze-dry:           ## Validate + show the Bronze load plan (no warehouse needed)
+	uv run python -m ingestion.load_to_bronze --source-dir data/raw --dry-run
+
+bronze:               ## Validate + land all source files into Bronze (append-only, idempotent)
+	uv run python -m ingestion.load_to_bronze --source-dir data/raw
+
+pytest:               ## Run the Python ingestion unit tests
+	uv run pytest ingestion/tests -q
 
 connection-test:      ## Confirm the warehouse connection is configured correctly
 	$(DBT) debug $(DBT_FLAGS)

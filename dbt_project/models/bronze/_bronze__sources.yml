@@ -1,0 +1,161 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Raw landing zone. Tables here are written by the Python ingestion loader
+      (`ingestion/load_to_bronze.py`) exactly as the source files arrived — every
+      column as STRING plus typed ingestion metadata — after passing their data
+      contract. Append-only. No transformation happens here; typing starts in the
+      bronze view models.
+    database: "{{ env_var('DBT_BIGQUERY_PROJECT') }}"
+    # Landing dataset is <target dataset>_raw, matching load_to_bronze.py.
+    schema: "{{ target.dataset ~ '_raw' }}"
+
+    # Freshness is checked against the ingestion timestamp. Thresholds are
+    # deliberately generous here; tier-1 source tests are expanded in Phase 6.
+    freshness:
+      warn_after: { count: 36, period: hour }
+      error_after: { count: 72, period: hour }
+    loaded_at_field: "CAST(_loaded_at AS TIMESTAMP)"
+
+    tables:
+      - name: raw_pos_orders
+        description: Raw POS order lines. One row per order line, as landed (with injected dups/nulls/dirty regions).
+        columns:
+          - name: order_line_id
+            description: POS-assigned order-line natural key (string; not unique at Bronze due to injected duplicates).
+          - name: order_id
+            description: Parent order identifier.
+          - name: order_date
+            description: Transaction date (string in Bronze; typed in the view).
+          - name: customer_id
+            description: Customer natural key; may be null (injected missingness).
+          - name: product_id
+            description: Product natural key.
+          - name: region
+            description: Raw region label; spelling is inconsistent and conformed downstream.
+          - name: channel
+            description: Sales channel (Retail/Online/Wholesale).
+          - name: quantity
+            description: Units; negative for returns.
+          - name: unit_price
+            description: Per-unit list price in the line currency.
+          - name: discount_pct
+            description: Fractional discount (0–1).
+          - name: gross_revenue
+            description: quantity * unit_price in line currency.
+          - name: discount_amount
+            description: Discount value in line currency (negative on returns).
+          - name: net_revenue
+            description: gross_revenue - discount_amount in line currency.
+          - name: currency
+            description: ISO currency of monetary columns (USD/EUR).
+          - name: _loaded_at
+            description: Ingestion timestamp (UTC).
+          - name: _source_file
+            description: Originating file name.
+          - name: _batch_id
+            description: SHA-256 content hash of the source file; drives idempotent re-loads.
+          - name: _source_system
+            description: Source system tag.
+
+      - name: raw_gl_extract
+        description: Raw ERP general-ledger postings. One row per posting; revenue/COGS reconcile to sales.
+        columns:
+          - name: gl_id
+            description: Unique GL posting id.
+          - name: posting_date
+            description: Posting date (string in Bronze).
+          - name: account_code
+            description: GL account code (4000 revenue, 5000 COGS, 6xxx opex).
+          - name: account_name
+            description: Account name.
+          - name: region
+            description: Attributed region.
+          - name: cost_center
+            description: Cost center / channel.
+          - name: amount_usd
+            description: Amount in USD; revenue credited (negative), expenses debited (positive).
+          - name: currency
+            description: Always USD for the GL.
+          - name: source_system
+            description: Source system tag from the extract.
+          - name: _loaded_at
+            description: Ingestion timestamp (UTC).
+          - name: _source_file
+            description: Originating file name.
+          - name: _batch_id
+            description: SHA-256 content hash of the source file.
+          - name: _source_system
+            description: Source system tag stamped at ingestion.
+
+      - name: raw_customer_master
+        description: Raw dated customer-master extracts. One row per customer per extract_date.
+        columns:
+          - name: extract_date
+            description: Date this full extract was taken (part of the natural key).
+          - name: customer_id
+            description: Customer natural key.
+          - name: customer_name
+            description: Customer display name.
+          - name: customer_segment
+            description: Commercial segment (SCD2-tracked downstream).
+          - name: region
+            description: Home region (SCD2-tracked downstream).
+          - name: signup_date
+            description: Onboarding date (may predate the reporting window).
+          - name: _loaded_at
+            description: Ingestion timestamp (UTC).
+          - name: _source_file
+            description: Originating file name.
+          - name: _batch_id
+            description: SHA-256 content hash of the source file.
+          - name: _source_system
+            description: Source system tag.
+
+      - name: raw_product_master
+        description: Raw dated product-master extracts. One row per product per extract_date.
+        columns:
+          - name: extract_date
+            description: Date this full extract was taken (part of the natural key).
+          - name: product_id
+            description: Product natural key.
+          - name: description
+            description: Product description (SCD1-tracked downstream).
+          - name: category
+            description: Merchandising category (SCD2-tracked downstream).
+          - name: subcategory
+            description: Merchandising subcategory.
+          - name: list_price
+            description: Catalogue list price in USD (SCD2-tracked downstream).
+          - name: standard_cost
+            description: Standard unit cost in USD.
+          - name: _loaded_at
+            description: Ingestion timestamp (UTC).
+          - name: _source_file
+            description: Originating file name.
+          - name: _batch_id
+            description: SHA-256 content hash of the source file.
+          - name: _source_system
+            description: Source system tag.
+
+      - name: raw_fx_rates
+        description: Raw monthly FX reference rates. One row per month per currency pair.
+        columns:
+          - name: rate_date
+            description: First day of the month the rate applies to.
+          - name: from_currency
+            description: Source currency of the pair.
+          - name: to_currency
+            description: Target (reporting) currency, always USD.
+          - name: rate
+            description: Multiplicative conversion rate from->to.
+          - name: _loaded_at
+            description: Ingestion timestamp (UTC).
+          - name: _source_file
+            description: Originating file name.
+          - name: _batch_id
+            description: SHA-256 content hash of the source file.
+          - name: _source_system
+            description: Source system tag.

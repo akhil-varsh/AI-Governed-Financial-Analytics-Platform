@@ -45,13 +45,11 @@ snapshots:
 
 seeds:
   northwind:
-    +schema: bronze
-    fx_rates:
+    +schema: silver          # conformance reference data lives with the Silver layer
+    region_conformance:
       +column_types:
-        rate_date: date
-        from_currency: string
-        to_currency: string
-        rate: numeric
+        raw_region: string
+        region_canonical: string
 
 # Surface project-wide vars here so warehouse-specific or business constants are
 # declared in one place (fiscal year start month is used by dim_date).
