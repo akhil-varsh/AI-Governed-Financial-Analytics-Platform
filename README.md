@@ -4,7 +4,7 @@
 
 **Let a CFO ask a finance data warehouse questions in plain English — without ever getting a made-up number, a dropped table, or an unlogged query back.**
 
-A tested dbt + DuckDB star schema, wrapped in a read-only [MCP](https://modelcontextprotocol.io) server that puts a governance layer between an LLM and the numbers.
+A tested dbt + DuckDB star schema, wrapped in a read-only MCP server that puts a governance layer between an LLM and the numbers.
 
 [![CI](https://github.com/akhil-varsh/AI-Governed-Financial-Analytics-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/akhil-varsh/AI-Governed-Financial-Analytics-Platform/actions/workflows/ci.yml)
 &nbsp;![Tests](https://img.shields.io/badge/tests-257%20passing-brightgreen)
